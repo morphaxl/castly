@@ -8,6 +8,7 @@ import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { CharacterCamera } from "@/components/world/CharacterCamera";
 import { useCharacterControls } from "@/hooks/useCharacterControls";
+import { useUpdateMyPresence } from "@/lib/liveblocks.config";
 
 const MODEL_URL = "/characters/char_rbot.glb";
 const TARGET_HEIGHT = 1.9;
@@ -27,11 +28,12 @@ const JUMP_FORCE = 5.8;
 const GRAVITY = 18;
 const GROUND_Y = 0;
 
-export function LocalPlayer() {
+export function LocalPlayer({ identity, initialPosition, onTransformChange }) {
   const controls = useCharacterControls(true);
+  const updateMyPresence = useUpdateMyPresence();
   const playerRef = useRef(null);
   const visualRef = useRef(null);
-  const positionRef = useRef(new THREE.Vector3(0, 0, 0));
+  const positionRef = useRef(new THREE.Vector3(...initialPosition));
   const rotationRef = useRef(0);
   const velocityRef = useRef(new THREE.Vector3());
   const moveDirectionRef = useRef(new THREE.Vector3());
@@ -40,10 +42,13 @@ export function LocalPlayer() {
   const actionsRef = useRef({});
   const clipDurationsRef = useRef({});
   const activeClipRef = useRef(null);
+  const lastPresenceRef = useRef(null);
   const jumpPhaseRef = useRef("grounded");
   const jumpTimerRef = useRef(0);
   const verticalVelocityRef = useRef(0);
   const jumpLatchRef = useRef(false);
+  const presenceQuaternionRef = useRef(new THREE.Quaternion());
+  const presenceEulerRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
 
   const cameraBasisRef = useRef({
     controls: {
@@ -235,10 +240,28 @@ export function LocalPlayer() {
       visualRef.current.rotation.y = rotationRef.current;
     }
 
+    onTransformChange?.(
+      [
+        positionRef.current.x,
+        positionRef.current.y,
+        positionRef.current.z,
+      ],
+      rotationRef.current
+    );
+
     const horizontalSpeed = Math.hypot(
       velocityRef.current.x,
       velocityRef.current.z
     );
+
+    const nextAnimation =
+      jumpPhaseRef.current !== "grounded"
+        ? "jump"
+        : horizontalSpeed < 0.2
+          ? "idle"
+          : controls.sprint
+            ? "run"
+            : "walk";
 
     if (jumpPhaseRef.current === "grounded") {
       if (horizontalSpeed < 0.2) {
@@ -248,6 +271,42 @@ export function LocalPlayer() {
       } else {
         playClip(MOVEMENT_CLIPS.walk);
       }
+    }
+
+    presenceEulerRef.current.set(0, rotationRef.current, 0);
+    presenceQuaternionRef.current.setFromEuler(presenceEulerRef.current);
+
+    const nextPresence = {
+      name: identity.name,
+      color: identity.color,
+      position: [
+        positionRef.current.x,
+        positionRef.current.y,
+        positionRef.current.z,
+      ],
+      rotation: [
+        presenceQuaternionRef.current.x,
+        presenceQuaternionRef.current.y,
+        presenceQuaternionRef.current.z,
+        presenceQuaternionRef.current.w,
+      ],
+      animation: nextAnimation,
+    };
+
+    const lastPresence = lastPresenceRef.current;
+    const hasMeaningfulChange =
+      !lastPresence ||
+      Math.abs(lastPresence.position[0] - nextPresence.position[0]) > 0.01 ||
+      Math.abs(lastPresence.position[1] - nextPresence.position[1]) > 0.01 ||
+      Math.abs(lastPresence.position[2] - nextPresence.position[2]) > 0.01 ||
+      Math.abs(lastPresence.rotation[1] - nextPresence.rotation[1]) > 0.01 ||
+      lastPresence.animation !== nextPresence.animation ||
+      lastPresence.name !== nextPresence.name ||
+      lastPresence.color !== nextPresence.color;
+
+    if (hasMeaningfulChange) {
+      updateMyPresence(nextPresence);
+      lastPresenceRef.current = nextPresence;
     }
 
     mixerRef.current?.update(delta);

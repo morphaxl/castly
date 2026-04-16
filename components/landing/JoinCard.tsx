@@ -4,46 +4,23 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  PLAYER_COLORS,
+  writePlayerIdentity,
+} from "@/lib/player-identity";
 
-const GUEST_NAMES = [
-  "Guest Fox",
-  "Guest Pine",
-  "Guest Reef",
-  "Guest Spark",
-  "Guest Nova",
-  "Guest Echo",
-  "Guest Drift",
-  "Guest Fern",
-];
-
-const COLORS = [
-  "#ef4444",
-  "#f97316",
-  "#eab308",
-  "#22c55e",
-  "#3b82f6",
-  "#8b5cf6",
-  "#6b7280",
-  "#f5f5f5",
-];
+const DEFAULT_PLACEHOLDER = "Guest Fox";
+const DEFAULT_COLOR = PLAYER_COLORS[0];
 
 export function JoinCard() {
   const router = useRouter();
   const [name, setName] = useState("");
-  const [color, setColor] = useState(
-    () => COLORS[Math.floor(Math.random() * COLORS.length)]
-  );
-  const [placeholder] = useState(
-    () => GUEST_NAMES[Math.floor(Math.random() * GUEST_NAMES.length)]
-  );
+  const [color, setColor] = useState<string>(DEFAULT_COLOR);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const playerName = name.trim() || placeholder;
-    localStorage.setItem(
-      "castly-player",
-      JSON.stringify({ name: playerName, color })
-    );
+    const playerName = name.trim() || DEFAULT_PLACEHOLDER;
+    writePlayerIdentity({ name: playerName, color });
     router.push("/world");
   }
 
@@ -65,7 +42,7 @@ export function JoinCard() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={placeholder}
+            placeholder={DEFAULT_PLACEHOLDER}
             maxLength={20}
             autoComplete="off"
             className="h-10 w-full rounded-lg border border-white/[0.08] bg-white/[0.04] px-3 text-sm text-white placeholder:text-white/25 outline-none transition-colors focus:border-white/20 focus:bg-white/[0.06]"
@@ -77,7 +54,7 @@ export function JoinCard() {
             Pick a color
           </span>
           <div className="flex w-full justify-between">
-            {COLORS.map((c) => (
+            {PLAYER_COLORS.map((c) => (
               <button
                 key={c}
                 type="button"

@@ -2,9 +2,25 @@
 
 import { Grid } from "@react-three/drei";
 
+import { GeneratedObject } from "./GeneratedObject";
 import { LocalPlayer } from "./LocalPlayer";
+import { RemotePlayers } from "./RemotePlayers";
+import type { PlacedGeneratedObject, Vec3 } from "@/lib/ai-object-schema";
+import type { PlayerIdentity } from "@/lib/player-identity";
 
-export function Scene() {
+type SceneProps = {
+  objects: PlacedGeneratedObject[];
+  onPlayerTransformChange: (position: Vec3, rotation: number) => void;
+  playerSpawnPosition: Vec3;
+  playerIdentity: PlayerIdentity;
+};
+
+export function Scene({
+  objects,
+  onPlayerTransformChange,
+  playerSpawnPosition,
+  playerIdentity,
+}: SceneProps) {
   return (
     <>
       <color attach="background" args={["#0a0a1a"]} />
@@ -41,7 +57,16 @@ export function Scene() {
         fadeStrength={1.5}
       />
 
-      <LocalPlayer />
+      {objects.map((object) => (
+        <GeneratedObject key={object.id} object={object} />
+      ))}
+
+      <RemotePlayers />
+      <LocalPlayer
+        identity={playerIdentity}
+        initialPosition={playerSpawnPosition}
+        onTransformChange={onPlayerTransformChange}
+      />
     </>
   );
 }
