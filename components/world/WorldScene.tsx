@@ -11,7 +11,7 @@ import {
 } from "react";
 
 import { Canvas } from "@react-three/fiber";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 import { nanoid } from "nanoid";
 
 import {
@@ -137,45 +137,115 @@ function RoomBadge({ roomId, playerName, playerColor }: { roomId: string; player
   );
 }
 
-function GeneratingIndicator() {
-  return (
-    <div
-      className="flex items-center gap-2.5 rounded-lg bg-emerald-500/[0.08] px-3 py-2 backdrop-blur-xl"
-      style={{ animation: "hud-slide-in-right 0.35s ease-out both" }}
-    >
-      <div
-        className="h-3.5 w-3.5 rounded-full border-[1.5px] border-emerald-400/20 border-t-emerald-400/80"
-        style={{ animation: "hud-spinner 0.8s linear infinite" }}
-      />
-      <span className="text-[11px] font-medium text-emerald-300/80">
-        Generating...
-      </span>
-    </div>
-  );
+type GenerationPhase = "idle" | "sending" | "imagining" | "building" | "placing" | "done" | "error";
+
+type GenerationState = {
+  phase: GenerationPhase;
+  prompt: string;
+  label: string | null;
+  error: string | null;
+};
+
+const GENERATION_IDLE: GenerationState = { phase: "idle", prompt: "", label: null, error: null };
+
+const GENERATION_STEPS = [
+  { key: "sending", label: "Sending" },
+  { key: "imagining", label: "Imagining" },
+  { key: "building", label: "Building" },
+  { key: "placing", label: "Placing" },
+] as const;
+
+const STEP_ORDER: Record<string, number> = { sending: 0, imagining: 1, building: 2, placing: 3, done: 4 };
+
+function StepDot({ status }: { status: "done" | "active" | "pending" }) {
+  if (status === "done") {
+    return (
+      <div className="flex h-[14px] w-[14px] items-center justify-center rounded-full bg-emerald-400/80">
+        <Check className="h-2.5 w-2.5 text-[#0a0a1a]" strokeWidth={3} />
+      </div>
+    );
+  }
+  if (status === "active") {
+    return (
+      <div className="relative flex h-[14px] w-[14px] items-center justify-center">
+        <div
+          className="absolute inset-0 rounded-full bg-emerald-400/25"
+          style={{ animation: "hud-pulse-dot 1.5s ease-in-out infinite" }}
+        />
+        <div className="h-[6px] w-[6px] rounded-full bg-emerald-400" />
+      </div>
+    );
+  }
+  return <div className="h-[6px] w-[6px] rounded-full bg-white/[0.1] ml-1" />;
 }
 
-function ErrorToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
-  useEffect(() => {
-    const timer = setTimeout(onDismiss, 6000);
-    return () => clearTimeout(timer);
-  }, [onDismiss]);
+function GenerationStatus({ state }: { state: GenerationState }) {
+  if (state.phase === "idle") return null;
+
+  const isDone = state.phase === "done";
+  const isError = state.phase === "error";
+  const currentIndex = STEP_ORDER[state.phase] ?? -1;
 
   return (
     <div
-      className="pointer-events-auto flex items-center gap-2 rounded-lg bg-rose-500/[0.1] px-3 py-2 backdrop-blur-xl"
-      style={{ animation: "hud-slide-in-right 0.35s ease-out both" }}
+      className="flex w-[200px] flex-col gap-2.5 rounded-xl bg-black/35 px-3.5 py-3 backdrop-blur-2xl"
+      style={{
+        animation: isDone || isError
+          ? undefined
+          : "hud-slide-in-right 0.3s ease-out both",
+      }}
     >
-      <div className="h-1.5 w-1.5 rounded-full bg-rose-400/80" />
-      <span className="max-w-[220px] truncate text-[11px] text-rose-200/80">
-        {message}
-      </span>
-      <button
-        type="button"
-        onClick={onDismiss}
-        className="ml-1 flex h-4 w-4 items-center justify-center rounded text-rose-300/50 transition-colors hover:text-rose-200"
-      >
-        <X className="h-3 w-3" />
-      </button>
+      <p className="truncate text-[11px] italic text-white/30">
+        &ldquo;{state.prompt}&rdquo;
+      </p>
+
+      {isError ? (
+        <div className="flex items-center gap-2">
+          <div className="h-1.5 w-1.5 shrink-0 rounded-full bg-rose-400/80" />
+          <span className="truncate text-[11px] text-rose-300/80">
+            {state.error ?? "Generation failed"}
+          </span>
+        </div>
+      ) : isDone ? (
+        <div className="flex items-center gap-2">
+          <div className="flex h-[14px] w-[14px] shrink-0 items-center justify-center rounded-full bg-emerald-400/80">
+            <Check className="h-2.5 w-2.5 text-[#0a0a1a]" strokeWidth={3} />
+          </div>
+          <span className="truncate text-[11px] font-medium text-emerald-300/90">
+            {state.label ?? "Object placed"}
+          </span>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          {GENERATION_STEPS.map((step, i) => {
+            const status: "done" | "active" | "pending" =
+              i < currentIndex ? "done" : i === currentIndex ? "active" : "pending";
+            return (
+              <div key={step.key} className="flex items-center gap-2">
+                <StepDot status={status} />
+                <span
+                  className={[
+                    "text-[11px] transition-colors duration-300",
+                    status === "active"
+                      ? "font-medium text-white/70"
+                      : status === "done"
+                        ? "text-white/30"
+                        : "text-white/15",
+                  ].join(" ")}
+                >
+                  {step.label}
+                </span>
+                {status === "active" && (
+                  <div
+                    className="ml-auto h-3 w-3 rounded-full border-[1.5px] border-emerald-400/20 border-t-emerald-400/70"
+                    style={{ animation: "hud-spinner 0.8s linear infinite" }}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -190,12 +260,35 @@ type MultiplayerWorldContentProps = {
   playerSpawnPosition: Vec3;
 };
 
+function useGenerationTimers(
+  phase: GenerationPhase,
+  setGen: React.Dispatch<React.SetStateAction<GenerationState>>,
+) {
+  useEffect(() => {
+    if (phase === "sending") {
+      const t = setTimeout(() => setGen((s) => ({ ...s, phase: "imagining" })), 400);
+      return () => clearTimeout(t);
+    }
+    if (phase === "imagining") {
+      const t = setTimeout(() => setGen((s) => ({ ...s, phase: "building" })), 2200);
+      return () => clearTimeout(t);
+    }
+    if (phase === "done") {
+      const t = setTimeout(() => setGen(GENERATION_IDLE), 3000);
+      return () => clearTimeout(t);
+    }
+    if (phase === "error") {
+      const t = setTimeout(() => setGen(GENERATION_IDLE), 6000);
+      return () => clearTimeout(t);
+    }
+  }, [phase, setGen]);
+}
+
 function MultiplayerWorldContent({
   identity,
   playerSpawnPosition,
 }: MultiplayerWorldContentProps) {
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generationError, setGenerationError] = useState<string | null>(null);
+  const [gen, setGen] = useState<GenerationState>(GENERATION_IDLE);
   const playerTransformRef = useRef<{
     position: Vec3;
     rotation: number;
@@ -203,6 +296,10 @@ function MultiplayerWorldContent({
     position: playerSpawnPosition,
     rotation: 0,
   });
+
+  useGenerationTimers(gen.phase, setGen);
+
+  const isGenerating = gen.phase !== "idle" && gen.phase !== "done" && gen.phase !== "error";
 
   const handlePlayerTransformChange = useCallback(
     (position: Vec3, rotation: number) => {
@@ -237,8 +334,7 @@ function MultiplayerWorldContent({
   );
 
   const handlePromptSubmit = useCallback(async (prompt: string) => {
-    setIsGenerating(true);
-    setGenerationError(null);
+    setGen({ phase: "sending", prompt, label: null, error: null });
 
     try {
       const response = await fetch("/api/scene/generate", {
@@ -265,6 +361,9 @@ function MultiplayerWorldContent({
       }
 
       const definition = aiGeneratedObjectSchema.parse(payload.object);
+
+      setGen((s) => ({ ...s, phase: "placing", label: definition.label }));
+
       const { position, rotation } = playerTransformRef.current;
       const x = position[0];
       const z = position[2];
@@ -289,12 +388,12 @@ function MultiplayerWorldContent({
         },
         definitionJson: serializeGeneratedObjectDefinition(definition),
       });
+
+      await new Promise((r) => setTimeout(r, 600));
+      setGen((s) => ({ ...s, phase: "done" }));
     } catch (error) {
-      setGenerationError(
-        error instanceof Error ? error.message : "Failed to generate asset.",
-      );
-    } finally {
-      setIsGenerating(false);
+      const message = error instanceof Error ? error.message : "Failed to generate asset.";
+      setGen((s) => ({ ...s, phase: "error", error: message }));
     }
   }, [addGeneratedObject, identity.name]);
 
@@ -325,14 +424,8 @@ function MultiplayerWorldContent({
         />
       </div>
 
-      <div className="pointer-events-none absolute right-4 top-4 flex flex-col items-end gap-2">
-        {isGenerating && <GeneratingIndicator />}
-        {generationError && (
-          <ErrorToast
-            message={generationError}
-            onDismiss={() => setGenerationError(null)}
-          />
-        )}
+      <div className="pointer-events-none absolute right-4 top-4">
+        <GenerationStatus state={gen} />
       </div>
 
       <FloatingChatBox
