@@ -17,6 +17,7 @@ export type Presence = {
   color: string;
   position: [number, number, number];
   rotation: [number, number, number, number];
+  velocity: [number, number, number];
   animation: PlayerAnimation;
 };
 
@@ -33,7 +34,7 @@ declare global {
 
 const client = createClient({
   publicApiKey,
-  throttle: 32,
+  throttle: 16,
 });
 
 export const {

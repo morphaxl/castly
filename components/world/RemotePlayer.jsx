@@ -10,6 +10,15 @@ import { useOther } from "@/lib/liveblocks.config";
 
 const MODEL_URL = "/characters/char_rbot.glb";
 const TARGET_HEIGHT = 1.9;
+const INTERPOLATION_DELAY_MS = 100;
+const MAX_SNAPSHOT_AGE_MS = 500;
+const MAX_EXTRAPOLATION_SECONDS = 0.12;
+const POSITION_SNAP_EPSILON_SQ = 0.0001;
+
+const lerpAngle = (start, end, t) => {
+  const delta = ((end - start + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+  return start + delta * t;
+};
 
 const MOVEMENT_CLIPS = {
   idle: "Idle_Loop",
@@ -22,12 +31,12 @@ export function RemotePlayer({ connectionId }) {
   const presence = useOther(connectionId, (user) => user.presence);
   const groupRef = useRef(null);
   const visualRef = useRef(null);
-  const targetPositionRef = useRef(new THREE.Vector3());
-  const targetQuaternionRef = useRef(new THREE.Quaternion());
-  const targetEulerRef = useRef(new THREE.Euler(0, 0, 0, "YXZ"));
   const mixerRef = useRef(null);
   const actionsRef = useRef({});
   const activeClipRef = useRef(null);
+  const snapshotsRef = useRef([]);
+  const targetPositionRef = useRef(new THREE.Vector3());
+  const targetVelocityRef = useRef(new THREE.Vector3());
 
   const gltf = useGLTF(MODEL_URL);
   const characterScene = useMemo(() => clone(gltf.scene), [gltf.scene]);
@@ -99,8 +108,30 @@ export function RemotePlayer({ connectionId }) {
       return;
     }
 
-    targetPositionRef.current.fromArray(presence.position);
-    targetQuaternionRef.current.fromArray(presence.rotation);
+    const snapshot = {
+      position: new THREE.Vector3().fromArray(presence.position),
+      rotationY: new THREE.Euler()
+        .setFromQuaternion(new THREE.Quaternion().fromArray(presence.rotation))
+        .y,
+      velocity: new THREE.Vector3().fromArray(presence.velocity),
+      receivedAt: performance.now(),
+    };
+    const snapshots = snapshotsRef.current;
+
+    snapshots.push(snapshot);
+    while (snapshots.length > 8) {
+      snapshots.shift();
+    }
+
+    if (groupRef.current && !groupRef.current.userData.initialized) {
+      groupRef.current.position.copy(snapshot.position);
+      groupRef.current.userData.initialized = true;
+    }
+
+    if (visualRef.current && !visualRef.current.userData.initialized) {
+      visualRef.current.rotation.y = snapshot.rotationY;
+      visualRef.current.userData.initialized = true;
+    }
 
     const nextClip = MOVEMENT_CLIPS[presence.animation] ?? MOVEMENT_CLIPS.idle;
     playClip(nextClip);
@@ -111,23 +142,83 @@ export function RemotePlayer({ connectionId }) {
       return;
     }
 
-    const positionLerp = 1 - Math.exp(-10 * delta);
-    const rotationLerp = 1 - Math.exp(-12 * delta);
+    const snapshots = snapshotsRef.current;
+    if (!snapshots.length) {
+      mixerRef.current?.update(delta);
+      return;
+    }
+
+    const now = performance.now();
+    const renderTimestamp = now - INTERPOLATION_DELAY_MS;
+
+    while (snapshots.length >= 2 && snapshots[1].receivedAt <= renderTimestamp) {
+      snapshots.shift();
+    }
+
+    let targetRotationY = snapshots[snapshots.length - 1].rotationY;
+
+    if (
+      snapshots.length >= 2 &&
+      snapshots[0].receivedAt <= renderTimestamp &&
+      renderTimestamp <= snapshots[1].receivedAt
+    ) {
+      const from = snapshots[0];
+      const to = snapshots[1];
+      const interval = Math.max(1, to.receivedAt - from.receivedAt);
+      const alpha = THREE.MathUtils.clamp(
+        (renderTimestamp - from.receivedAt) / interval,
+        0,
+        1,
+      );
+
+      targetPositionRef.current.copy(from.position).lerp(to.position, alpha);
+      targetVelocityRef.current.copy(to.velocity);
+      targetRotationY = lerpAngle(from.rotationY, to.rotationY, alpha);
+    } else {
+      const latest = snapshots[snapshots.length - 1];
+      targetPositionRef.current.copy(latest.position);
+      targetVelocityRef.current.copy(latest.velocity);
+      targetRotationY = latest.rotationY;
+
+      const extrapolationSeconds = Math.min(
+        Math.max(0, renderTimestamp - latest.receivedAt) / 1000,
+        MAX_EXTRAPOLATION_SECONDS,
+      );
+
+      if (extrapolationSeconds > 0) {
+        targetPositionRef.current.addScaledVector(
+          targetVelocityRef.current,
+          extrapolationSeconds,
+        );
+      }
+    }
 
     if (groupRef.current) {
+      const positionLerp = THREE.MathUtils.clamp(delta / 0.12, 0, 1);
       groupRef.current.position.lerp(targetPositionRef.current, positionLerp);
+
+      if (
+        groupRef.current.position.distanceToSquared(targetPositionRef.current) <
+        POSITION_SNAP_EPSILON_SQ
+      ) {
+        groupRef.current.position.copy(targetPositionRef.current);
+      }
     }
 
     if (visualRef.current) {
-      targetEulerRef.current.setFromQuaternion(targetQuaternionRef.current);
-      visualRef.current.rotation.y = THREE.MathUtils.lerp(
+      const rotationLerp = THREE.MathUtils.clamp(delta / 0.14, 0, 1);
+      visualRef.current.rotation.y = lerpAngle(
         visualRef.current.rotation.y,
-        targetEulerRef.current.y,
+        targetRotationY,
         rotationLerp,
       );
     }
 
     mixerRef.current?.update(delta);
+
+    while (snapshots.length && now - snapshots[0].receivedAt > MAX_SNAPSHOT_AGE_MS) {
+      snapshots.shift();
+    }
   });
 
   if (!presence) {

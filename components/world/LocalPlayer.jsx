@@ -13,6 +13,8 @@ import { useUpdateMyPresence } from "@/lib/liveblocks.config";
 const MODEL_URL = "/characters/char_rbot.glb";
 const TARGET_HEIGHT = 1.9;
 
+const dampFactor = (rate, delta) => 1 - Math.exp(-rate * delta);
+
 const MOVEMENT_CLIPS = {
   idle: "Idle_Loop",
   walk: "Walk_Loop",
@@ -27,6 +29,7 @@ const RUN_SPEED = 6.1;
 const JUMP_FORCE = 5.8;
 const GRAVITY = 18;
 const GROUND_Y = 0;
+const PRESENCE_SEND_INTERVAL = 1 / 30;
 
 export function LocalPlayer({ identity, initialPosition, onTransformChange }) {
   const controls = useCharacterControls(true);
@@ -43,6 +46,7 @@ export function LocalPlayer({ identity, initialPosition, onTransformChange }) {
   const clipDurationsRef = useRef({});
   const activeClipRef = useRef(null);
   const lastPresenceRef = useRef(null);
+  const sendAccumulatorRef = useRef(0);
   const jumpPhaseRef = useRef("grounded");
   const jumpTimerRef = useRef(0);
   const verticalVelocityRef = useRef(0);
@@ -141,11 +145,11 @@ export function LocalPlayer({ identity, initialPosition, onTransformChange }) {
     };
   }, [characterScene, gltf.animations, playClip]);
 
-  const dampFactor = useCallback((rate, delta) => {
-    return 1 - Math.exp(-rate * delta);
-  }, []);
+
 
   useFrame((_, delta) => {
+    sendAccumulatorRef.current += delta;
+
     if (!controls.jump) {
       jumpLatchRef.current = false;
     }
@@ -290,6 +294,11 @@ export function LocalPlayer({ identity, initialPosition, onTransformChange }) {
         presenceQuaternionRef.current.z,
         presenceQuaternionRef.current.w,
       ],
+      velocity: [
+        velocityRef.current.x,
+        jumpPhaseRef.current !== "grounded" ? verticalVelocityRef.current : 0,
+        velocityRef.current.z,
+      ],
       animation: nextAnimation,
     };
 
@@ -300,13 +309,22 @@ export function LocalPlayer({ identity, initialPosition, onTransformChange }) {
       Math.abs(lastPresence.position[1] - nextPresence.position[1]) > 0.01 ||
       Math.abs(lastPresence.position[2] - nextPresence.position[2]) > 0.01 ||
       Math.abs(lastPresence.rotation[1] - nextPresence.rotation[1]) > 0.01 ||
+      Math.abs(lastPresence.velocity[0] - nextPresence.velocity[0]) > 0.05 ||
+      Math.abs(lastPresence.velocity[1] - nextPresence.velocity[1]) > 0.05 ||
+      Math.abs(lastPresence.velocity[2] - nextPresence.velocity[2]) > 0.05 ||
       lastPresence.animation !== nextPresence.animation ||
       lastPresence.name !== nextPresence.name ||
       lastPresence.color !== nextPresence.color;
 
-    if (hasMeaningfulChange) {
+    const shouldSendPresence =
+      !lastPresence ||
+      (hasMeaningfulChange &&
+        sendAccumulatorRef.current >= PRESENCE_SEND_INTERVAL);
+
+    if (shouldSendPresence) {
       updateMyPresence(nextPresence);
       lastPresenceRef.current = nextPresence;
+      sendAccumulatorRef.current = 0;
     }
 
     mixerRef.current?.update(delta);

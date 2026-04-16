@@ -257,7 +257,6 @@ export function CharacterCamera({
       lookTarget.current.y,
       lookTarget.current.z
     );
-    camera.updateMatrixWorld();
 
     tempForward.current
       .copy(lookTarget.current)

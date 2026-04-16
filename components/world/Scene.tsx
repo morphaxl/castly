@@ -5,6 +5,7 @@ import { Grid } from "@react-three/drei";
 import { GeneratedObject } from "./GeneratedObject";
 import { LocalPlayer } from "./LocalPlayer";
 import { RemotePlayers } from "./RemotePlayers";
+import { SceneErrorBoundary } from "./SceneErrorBoundary";
 import type { PlacedGeneratedObject, Vec3 } from "@/lib/ai-object-schema";
 import type { PlayerIdentity } from "@/lib/player-identity";
 
@@ -58,7 +59,9 @@ export function Scene({
       />
 
       {objects.map((object) => (
-        <GeneratedObject key={object.id} object={object} />
+        <SceneErrorBoundary key={object.id} silent>
+          <GeneratedObject object={object} />
+        </SceneErrorBoundary>
       ))}
 
       <RemotePlayers />

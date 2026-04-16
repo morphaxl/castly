@@ -263,6 +263,10 @@ export const parseStoredGeneratedObject = (
 ): PlacedGeneratedObject | null => {
   const storedResult = storedGeneratedObjectSchema.safeParse(value);
   if (!storedResult.success) {
+    console.warn(
+      "parseStoredGeneratedObject: stored object schema validation failed",
+      { errors: storedResult.error.issues },
+    );
     return null;
   }
 
@@ -271,6 +275,10 @@ export const parseStoredGeneratedObject = (
     const definitionResult = aiGeneratedObjectSchema.safeParse(parsedDefinition);
 
     if (!definitionResult.success) {
+      console.warn(
+        "parseStoredGeneratedObject: definition schema validation failed",
+        { id: storedResult.data.id, errors: definitionResult.error.issues },
+      );
       return null;
     }
 
@@ -283,7 +291,11 @@ export const parseStoredGeneratedObject = (
       transform: storedResult.data.transform,
       definition: definitionResult.data,
     };
-  } catch {
+  } catch (error) {
+    console.warn(
+      "parseStoredGeneratedObject: failed to parse definitionJson",
+      { id: storedResult.data.id, error },
+    );
     return null;
   }
 };

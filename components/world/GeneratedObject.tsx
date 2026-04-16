@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useMemo } from "react";
+
 import type {
   GeneratedGeometry,
   GeneratedPart,
@@ -98,14 +102,38 @@ export function GeneratedObject({
 }: {
   object: PlacedGeneratedObject;
 }) {
+  const duplicatePartNames = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    for (const part of object.definition.parts) {
+      counts.set(part.name, (counts.get(part.name) ?? 0) + 1);
+    }
+
+    return Array.from(counts.entries())
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name);
+  }, [object.definition.parts]);
+
+  useEffect(() => {
+    if (duplicatePartNames.length === 0) {
+      return;
+    }
+
+    console.warn("GeneratedObject has duplicate part names.", {
+      objectId: object.id,
+      objectLabel: object.label,
+      duplicatePartNames,
+    });
+  }, [duplicatePartNames, object.id, object.label]);
+
   return (
     <group
       position={object.transform.position}
       rotation={object.transform.rotation}
       scale={object.transform.scale}
     >
-      {object.definition.parts.map((part) => (
-        <PartMesh key={`${object.id}-${part.name}`} part={part} />
+      {object.definition.parts.map((part, index) => (
+        <PartMesh key={`${object.id}-${part.name}-${index}`} part={part} />
       ))}
     </group>
   );
