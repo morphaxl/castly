@@ -263,12 +263,23 @@ type MultiplayerWorldContentProps = {
 
 function RoomLifecycleManager() {
   const room = useRoom();
+  const teardownTriggeredRef = useRef(false);
 
   useEffect(() => {
     const destroyRoom = () => {
+      if (teardownTriggeredRef.current) {
+        return;
+      }
+
+      teardownTriggeredRef.current = true;
+
       const destroy = Reflect.get(room, "destroy");
       if (typeof destroy === "function") {
-        destroy.call(room);
+        try {
+          destroy.call(room);
+        } catch {
+          room.disconnect();
+        }
       } else {
         room.disconnect();
       }
@@ -280,7 +291,6 @@ function RoomLifecycleManager() {
     return () => {
       window.removeEventListener("pagehide", destroyRoom);
       window.removeEventListener("beforeunload", destroyRoom);
-      destroyRoom();
     };
   }, [room]);
 
