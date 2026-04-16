@@ -42,6 +42,7 @@ export const {
   useMutation,
   useOther,
   useOthersConnectionIds,
+  useRoom,
   useStatus,
   useStorage,
   useUpdateMyPresence,

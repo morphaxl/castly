@@ -25,6 +25,7 @@ import {
 import {
   RoomProvider,
   useMutation,
+  useRoom,
   useStorage,
 } from "@/lib/liveblocks.config";
 import { usePlayerIdentity } from "@/hooks/usePlayerIdentity";
@@ -260,6 +261,32 @@ type MultiplayerWorldContentProps = {
   playerSpawnPosition: Vec3;
 };
 
+function RoomLifecycleManager() {
+  const room = useRoom();
+
+  useEffect(() => {
+    const destroyRoom = () => {
+      const destroy = Reflect.get(room, "destroy");
+      if (typeof destroy === "function") {
+        destroy.call(room);
+      } else {
+        room.disconnect();
+      }
+    };
+
+    window.addEventListener("pagehide", destroyRoom);
+    window.addEventListener("beforeunload", destroyRoom);
+
+    return () => {
+      window.removeEventListener("pagehide", destroyRoom);
+      window.removeEventListener("beforeunload", destroyRoom);
+      destroyRoom();
+    };
+  }, [room]);
+
+  return null;
+}
+
 function useGenerationTimers(
   phase: GenerationPhase,
   setGen: React.Dispatch<React.SetStateAction<GenerationState>>,
@@ -399,6 +426,8 @@ function MultiplayerWorldContent({
 
   return (
     <div className="relative h-screen w-screen bg-[#0a0a1a]">
+      <RoomLifecycleManager />
+
       <SceneErrorBoundary>
         <Canvas
           shadows
