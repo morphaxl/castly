@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import * as THREE from "three";
 
 import type {
   GeneratedGeometry,
@@ -99,8 +100,12 @@ function PartMesh({ part }: { part: GeneratedPart }) {
 
 export function GeneratedObject({
   object,
+  isSelected = false,
+  onSelect,
 }: {
   object: PlacedGeneratedObject;
+  isSelected?: boolean;
+  onSelect?: (objectId: string) => void;
 }) {
   const duplicatePartNames = useMemo(() => {
     const counts = new Map<string, number>();
@@ -126,15 +131,59 @@ export function GeneratedObject({
     });
   }, [duplicatePartNames, object.id, object.label]);
 
+  const selectionRadius = useMemo(() => {
+    let radius = 0.85;
+
+    for (const part of object.definition.parts) {
+      const dx = maxComponent(
+        part.position.x,
+        part.position.x + part.scale.x,
+        part.position.x - part.scale.x,
+      );
+      const dz = maxComponent(
+        part.position.z,
+        part.position.z + part.scale.z,
+        part.position.z - part.scale.z,
+      );
+      radius = Math.max(radius, Math.hypot(dx, dz));
+    }
+
+    return Math.min(6, radius + 0.35);
+  }, [object.definition.parts]);
+
   return (
     <group
       position={object.transform.position}
       rotation={object.transform.rotation}
       scale={object.transform.scale}
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        onSelect?.(object.id);
+      }}
     >
+      {isSelected ? (
+        <mesh
+          position={[0, 0.04, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          renderOrder={2}
+        >
+          <ringGeometry args={[selectionRadius, selectionRadius + 0.12, 40]} />
+          <meshBasicMaterial
+            color="#86efac"
+            transparent
+            opacity={0.95}
+            side={THREE.DoubleSide}
+            depthWrite={false}
+          />
+        </mesh>
+      ) : null}
       {object.definition.parts.map((part, index) => (
         <PartMesh key={`${object.id}-${part.name}-${index}`} part={part} />
       ))}
     </group>
   );
+}
+
+function maxComponent(...values: number[]) {
+  return values.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
 }

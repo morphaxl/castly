@@ -180,3 +180,7 @@
   0%, 100% { border-color: rgba(52, 211, 153, 0.12); }
   50%      { border-color: rgba(52, 211, 153, 0.25); }
 }
+
+#liveblocks-badge {
+  display: none !important;
+}

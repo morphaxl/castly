@@ -127,8 +127,8 @@ export function FloatingChatBox({
               }}
               placeholder={
                 isGenerating
-                  ? "Generating your object..."
-                  : "Describe what to create..."
+                  ? "Working on your world..."
+                  : "Create or edit the world..."
               }
               className={[
                 "min-w-0 flex-1 bg-transparent text-[0.875rem] focus:outline-none",

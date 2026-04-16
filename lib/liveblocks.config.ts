@@ -35,6 +35,7 @@ declare global {
 const client = createClient({
   publicApiKey,
   throttle: 16,
+  badgeLocation: "bottom-left",
 });
 
 export const {

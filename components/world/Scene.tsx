@@ -14,6 +14,8 @@ type SceneProps = {
   onPlayerTransformChange: (position: Vec3, rotation: number) => void;
   playerSpawnPosition: Vec3;
   playerIdentity: PlayerIdentity;
+  selectedObjectId: string | null;
+  onSelectObject: (objectId: string) => void;
 };
 
 export function Scene({
@@ -21,6 +23,8 @@ export function Scene({
   onPlayerTransformChange,
   playerSpawnPosition,
   playerIdentity,
+  selectedObjectId,
+  onSelectObject,
 }: SceneProps) {
   return (
     <>
@@ -60,7 +64,11 @@ export function Scene({
 
       {objects.map((object) => (
         <SceneErrorBoundary key={object.id} silent>
-          <GeneratedObject object={object} />
+          <GeneratedObject
+            object={object}
+            isSelected={object.id === selectedObjectId}
+            onSelect={onSelectObject}
+          />
         </SceneErrorBoundary>
       ))}
 

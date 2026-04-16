@@ -241,6 +241,105 @@ const sanitizePart = (part: GeneratedPart): GeneratedPart => ({
   scale: sanitizeVector3(part.scale, { min: 0.1, max: 6 }),
 });
 
+const getGeometryHalfExtents = (part: GeneratedPart) => {
+  const geometry = part.geometry;
+  const sx = Math.abs(part.scale.x);
+  const sy = Math.abs(part.scale.y);
+  const sz = Math.abs(part.scale.z);
+
+  switch (geometry.type) {
+    case "box":
+      return {
+        x: ((geometry.width ?? 1) * sx) / 2,
+        y: ((geometry.height ?? 1) * sy) / 2,
+        z: ((geometry.depth ?? 1) * sz) / 2,
+      };
+    case "sphere": {
+      const radius = (geometry.radius ?? 0.8);
+      return { x: radius * sx, y: radius * sy, z: radius * sz };
+    }
+    case "cylinder":
+    case "cone": {
+      const radius = Math.max(
+        geometry.radius ?? 0,
+        geometry.radiusTop ?? 0,
+        geometry.radiusBottom ?? 0,
+        0.3,
+      );
+      return {
+        x: radius * sx,
+        y: ((geometry.height ?? 1.2) * sy) / 2,
+        z: radius * sz,
+      };
+    }
+    case "capsule": {
+      const radius = geometry.radius ?? 0.25;
+      const length = geometry.length ?? 1;
+      return {
+        x: radius * sx,
+        y: ((length + radius * 2) * sy) / 2,
+        z: radius * sz,
+      };
+    }
+    case "torus": {
+      const radius = geometry.radius ?? 0.7;
+      const tube = geometry.tube ?? 0.15;
+      const outer = radius + tube;
+      return {
+        x: outer * sx,
+        y: tube * sy,
+        z: outer * sz,
+      };
+    }
+  }
+};
+
+const normalizeDefinitionParts = (
+  parts: GeneratedPart[],
+): GeneratedPart[] => {
+  if (parts.length === 0) {
+    return parts;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (const part of parts) {
+    const extents = getGeometryHalfExtents(part);
+
+    minX = Math.min(minX, part.position.x - extents.x);
+    maxX = Math.max(maxX, part.position.x + extents.x);
+    minY = Math.min(minY, part.position.y - extents.y);
+    maxY = Math.max(maxY, part.position.y + extents.y);
+    minZ = Math.min(minZ, part.position.z - extents.z);
+    maxZ = Math.max(maxZ, part.position.z + extents.z);
+  }
+
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+  const liftY = minY;
+  const height = maxY - minY;
+  const autoScale = height < 0.9 ? 1.35 : 1;
+
+  return parts.map((part) => ({
+    ...part,
+    position: {
+      x: round((part.position.x - centerX) * autoScale),
+      y: round((part.position.y - liftY) * autoScale),
+      z: round((part.position.z - centerZ) * autoScale),
+    },
+    scale: {
+      x: round(part.scale.x * autoScale),
+      y: round(part.scale.y * autoScale),
+      z: round(part.scale.z * autoScale),
+    },
+  }));
+};
+
 export const toVec3Tuple = (vector: GeneratedVector3): Vec3 => [
   vector.x,
   vector.y,
@@ -251,12 +350,27 @@ export const sanitizeGeneratedObject = (
   definition: GeneratedSceneDefinition,
 ): GeneratedSceneDefinition => ({
   label: definition.label.trim().slice(0, 60) || "Generated Object",
-  parts: definition.parts.slice(0, 12).map(sanitizePart),
+  parts: normalizeDefinitionParts(
+    definition.parts.slice(0, 12).map(sanitizePart),
+  ),
 });
 
 export const serializeGeneratedObjectDefinition = (
   definition: GeneratedSceneDefinition,
 ) => JSON.stringify(definition);
+
+export const toStoredGeneratedObject = (
+  object: PlacedGeneratedObject,
+): StoredGeneratedObject => ({
+  id: object.id,
+  version: 1,
+  prompt: object.prompt,
+  label: object.label,
+  createdBy: object.createdBy,
+  createdAt: object.createdAt,
+  transform: object.transform,
+  definitionJson: serializeGeneratedObjectDefinition(object.definition),
+});
 
 export const parseStoredGeneratedObject = (
   value: unknown,
