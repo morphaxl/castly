@@ -138,7 +138,7 @@ Scene objects live in Liveblocks Storage as a `LiveList`. CRDTs handle concurren
 ## Getting Started
 
 ```bash
-git clone https://github.com/your-username/castly
+git clone https://github.com/morphaxl/castly.git
 cd castly
 pnpm install
 ```
@@ -192,6 +192,19 @@ castly/
     ├── useCharacterControls.ts        # WASD + sprint + jump input
     └── usePlayerIdentity.ts           # Name + color from localStorage
 ```
+
+---
+
+## Where This Goes Next
+
+Castly is a hackathon prototype — here's where the foundation leads:
+
+- **Character generation and customization** — let players describe their avatar ("a robot with a top hat", "a blue fox") and generate unique GLB characters on the fly using text-to-3D pipelines like Meshy. Pick from a gallery or create your own.
+- **Spatial awareness for the AI agent** — the agent currently knows object positions and player direction, but deeper spatial reasoning would unlock commands like "build a fence around the castle", "line up three trees along the path", or "put a lamp on top of the table". Understanding _on_, _inside_, _between_, and _around_ changes everything.
+- **AI NPCs** — spawn characters that live in the scene, wander autonomously, react to players, and respond to conversation. Type "add a shopkeeper near the fountain" and get an NPC with idle behavior and dialogue, not just a static mesh.
+- **Room system and permissions** — private rooms with invite links, per-object ownership, undo history, and room-level moderation tools.
+- **Richer geometry** — graduate from 6 primitives to AI-generated meshes (SDFs, marching cubes, or direct mesh generation) for organic shapes the current primitive set can't express.
+- **Physics and interactivity** — add Rapier physics so objects fall, collide, and stack. Let players pick up and throw objects. Make the world feel alive.
 
 ---
 
